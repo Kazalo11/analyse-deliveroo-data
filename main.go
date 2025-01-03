@@ -2,26 +2,82 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"strings"
+	"time"
 
-	"github.com/gocolly/colly"
+	"golang.org/x/net/html"
 )
 
+type OrderSummary struct {
+	Restaurant string
+	Price      float64
+	Date       time.Time
+}
+
+var (
+	orderSummary []string
+	summaryClass = "OrderSummary-c96f3428b2ccedb7"
+)
+
+func extractTextFromPTags(n *html.Node) {
+	if n.Type == html.ElementNode && n.Data == "p" {
+		text := getTextContent(n)
+		if text != "" {
+			orderSummary = append(orderSummary, text)
+		}
+	}
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		extractTextFromPTags(c)
+	}
+}
+
+func getTextContent(n *html.Node) string {
+	if n.Type == html.TextNode {
+		return strings.TrimSpace(n.Data)
+	}
+
+	var sb strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		sb.WriteString(getTextContent(c))
+	}
+	return sb.String()
+}
+
+func getOrderSummary(n *html.Node) {
+	if n.Type == html.ElementNode && n.Data == "div" {
+		for _, a := range n.Attr {
+			if a.Key == "class" && strings.Contains(a.Val, summaryClass) {
+
+				extractTextFromPTags(n)
+				return
+			}
+		}
+	}
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		getOrderSummary(c)
+	}
+}
+
 func main() {
-	c := colly.NewCollector()
-	c.OnRequest(func(r *colly.Request) {
-		fmt.Println("Visiting", r.URL.String())
-	})
+	file, err := os.Open("deliveroo_info.html")
+	if err != nil {
+		fmt.Printf("Error opening file: %v\n", err)
+		return
+	}
+	defer file.Close()
 
-	c.OnResponse(func(r *colly.Response) {
-		fmt.Println("Got a response from", r.Request.URL)
-	})
-	c.OnError(func(r *colly.Response, err error) {
-		fmt.Println("Request URL:", r.Request.URL, "failed with response:", r, "\nError:", err)
-	})
+	doc, err := html.Parse(file)
+	if err != nil {
+		fmt.Printf("Error parsing HTML: %v\n", err)
+		return
+	}
 
-	c.OnHTML("*", func(e *colly.HTMLElement) {
-		fmt.Println(e)
-	})
+	getOrderSummary(doc)
+	for _, text := range orderSummary {
+		fmt.Println(text)
+	}
 
-	c.Visit("https://deliveroo.co.uk/orders")
 }
