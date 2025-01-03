@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
-	"golang.org/x/net/html"
+	"github.com/PuerkitoBio/goquery"
 )
 
 type OrderSummary struct {
@@ -16,72 +19,54 @@ type OrderSummary struct {
 }
 
 var (
-	orderSummary []string
-	summaryClass = "OrderSummary-c96f3428b2ccedb7"
+	restaurants = make(map[string]int)
 )
-
-func extractTextFromPTags(n *html.Node) {
-	if n.Type == html.ElementNode && n.Data == "p" {
-		text := getTextContent(n)
-		if text != "" {
-			orderSummary = append(orderSummary, text)
-		}
-	}
-
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		extractTextFromPTags(c)
-	}
-}
-
-func getTextContent(n *html.Node) string {
-	if n.Type == html.TextNode {
-		return strings.TrimSpace(n.Data)
-	}
-
-	var sb strings.Builder
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		sb.WriteString(getTextContent(c))
-	}
-	return sb.String()
-}
-
-func extractDeliverooData(n *html.Node) OrderSummary {
-
-}
-
-func getOrderSummary(n *html.Node) {
-	if n.Type == html.ElementNode && n.Data == "div" {
-		for _, a := range n.Attr {
-			if a.Key == "class" && strings.Contains(a.Val, summaryClass) {
-
-				extractTextFromPTags(n)
-				return
-			}
-		}
-	}
-
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		getOrderSummary(c)
-	}
-}
 
 func main() {
 	file, err := os.Open("deliveroo_info.html")
 	if err != nil {
-		fmt.Printf("Error opening file: %v\n", err)
-		return
+		log.Fatalf("Failed to open file: %v", err)
 	}
 	defer file.Close()
 
-	doc, err := html.Parse(file)
+	htmlBytes, err := io.ReadAll(file)
 	if err != nil {
-		fmt.Printf("Error parsing HTML: %v\n", err)
-		return
+		log.Fatalf("Failed to read file: %v", err)
 	}
 
-	getOrderSummary(doc)
-	for _, text := range orderSummary {
-		fmt.Println(text)
+	html := string(htmlBytes)
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		log.Fatalf("Failed to parse HTML: %v", err)
 	}
 
+	doc.Find("div.OrderSummary-c96f3428b2ccedb7 p.ccl-a396bc55704a9c8a").Each(func(i int, s *goquery.Selection) {
+		text := strings.TrimSpace(s.Text())
+		_, ok := restaurants[text]
+		if !ok {
+			restaurants[text] = 1
+		} else {
+			restaurants[text] += 1
+		}
+	})
+
+	type kv struct {
+		Key   string
+		Value int
+	}
+
+	var sortedRestaurants []kv
+	for k, v := range restaurants {
+		sortedRestaurants = append(sortedRestaurants, kv{k, v})
+	}
+
+	sort.Slice(sortedRestaurants, func(i, j int) bool {
+		return sortedRestaurants[i].Value > sortedRestaurants[j].Value
+	})
+
+	fmt.Println("Restaurants sorted by frequency:")
+	for _, entry := range sortedRestaurants {
+		fmt.Printf("%s: %d\n", entry.Key, entry.Value)
+	}
 }
