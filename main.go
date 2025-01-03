@@ -45,6 +45,10 @@ func getTextContent(n *html.Node) string {
 	return sb.String()
 }
 
+func extractDeliverooData(n *html.Node) OrderSummary {
+
+}
+
 func getOrderSummary(n *html.Node) {
 	if n.Type == html.ElementNode && n.Data == "div" {
 		for _, a := range n.Attr {
