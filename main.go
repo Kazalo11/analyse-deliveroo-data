@@ -5,7 +5,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +22,8 @@ type OrderSummary struct {
 
 var (
 	restaurants = make(map[string]int)
+	total_price = 0.0
+	r           = regexp.MustCompile(`\d\d.\d\d`)
 )
 
 func main() {
@@ -51,6 +55,19 @@ func main() {
 		}
 	})
 
+	doc.Find("div.OrderSummary-c96f3428b2ccedb7 p.ccl-6f43f9bb8ff2d712").Each(func(i int, s *goquery.Selection) {
+		text := strings.TrimSpace(s.Text())
+		numString := r.FindString(text)
+
+		number, err := strconv.ParseFloat(numString, 64)
+		if err != nil {
+			fmt.Println("Can't convert string to number")
+			return
+		}
+		total_price += number
+
+	})
+
 	type kv struct {
 		Key   string
 		Value int
@@ -69,4 +86,7 @@ func main() {
 	for _, entry := range sortedRestaurants {
 		fmt.Printf("%s: %d\n", entry.Key, entry.Value)
 	}
+
+	fmt.Printf("Total amount spent: £%.2f\n", total_price)
+
 }
